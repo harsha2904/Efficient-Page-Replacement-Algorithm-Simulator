@@ -5,38 +5,106 @@ st.title("Hello, Streamlit!")
 st.write("This is my first Streamlit app.")
 
 #added fifo functionality
-def fifo(self):
-        page_faults = 0
-        memory = []
-        for page in self.reference_string:
-            if page not in memory:
-                if len(memory) < self.frames:
-                    memory.append(page)
-                else:
-                    memory.pop(0)
-                    memory.append(page)
-                page_faults += 1
-        return page_faults
+def fifo(pages, frames):
+    memory, page_faults, page_hits = deque(), 0, 0
+    frame_updates = []
+    
+    for page in pages:
+        if page in memory:
+            page_hits += 1
+        else:
+            page_faults += 1
+            if len(memory) == frames:
+                memory.popleft()
+            memory.append(page)
+        frame_updates.append(f"{page} : {' '.join(map(str, memory))}")
+    
+    return page_faults, page_hits, frame_updates
+
 
 #added lru functionality
 #this function used to store pages that are recently used with min time 
 #when there is no enough memory to store the pages, we'll see less recently used page and replace it with current page
+#lru fixed 
+def lru(pages, frames):
+    memory, page_faults, page_hits = [], 0, 0
+    frame_updates = []
+    
+    for page in pages:
+        if page in memory:
+            page_hits += 1
+            memory.remove(page)
+        else:
+            page_faults += 1
+            if len(memory) == frames:
+                memory.pop(0)
+        memory.append(page)
+        frame_updates.append(f"{page} : {' '.join(map(str, memory))}")
+    
+    return page_faults, page_hits, frame_updates
 
-def lru(self):
-        page_faults = 0
-        memory = []
-        recent_usage = {}#stores  time, to check least recently used page 
-        for i, page in enumerate(self.reference_string): #list of pages that algo will enumerate
-            if page not in memory:
-                if len(memory) < self.frames:
-                    memory.append(page)
-                else:
-                    lru_page = min(memory, key=lambda p: recent_usage.get(p, float('-inf')))#gets most recently used page
-                    memory.remove(lru_page)
-                    memory.append(page)
-                page_faults += 1
-            recent_usage[page] = i
-        return page_faults
+
+#added lfu with some fixes
+def lfu(pages, frames):
+    memory, freq, page_faults, page_hits = [], Counter(), 0, 0
+    frame_updates = []
+    
+    for page in pages:
+        if page in memory:
+            page_hits += 1
+        else:
+            page_faults += 1
+            if len(memory) == frames:
+                least_used = min(memory, key=lambda p: freq[p])
+                memory.remove(least_used)
+            memory.append(page)
+        freq[page] += 1
+        frame_updates.append(f"{page} : {' '.join(map(str, memory))}")
+    
+    return page_faults, page_hits, frame_updates
+
+#added mfu function
+def mfu(pages, frames):
+    memory, freq, page_faults, page_hits = [], Counter(), 0, 0
+    frame_updates = []
+    
+    for page in pages:
+        if page in memory:
+            page_hits += 1
+        else:
+            page_faults += 1
+            if len(memory) == frames:
+                most_used = max(memory, key=lambda p: freq[p])
+                memory.remove(most_used)
+            memory.append(page)
+        freq[page] += 1
+        frame_updates.append(f"{page} : {' '.join(map(str, memory))}")
+    
+    return page_faults, page_hits, frame_updates
+
+#optimal funtion is added
+def optimal(pages, frames):
+    memory, page_faults, page_hits = [], 0, 0
+    frame_updates = []
+
+    for i, page in enumerate(pages):
+        if page in memory:
+            page_hits += 1
+        else:
+            page_faults += 1
+            if len(memory) == frames:
+                future_use = {}
+                for mem_page in memory:
+                    try:
+                        future_use[mem_page] = pages[i+1:].index(mem_page)
+                    except ValueError:
+                        future_use[mem_page] = float('inf')
+                page_to_replace = max(future_use, key=future_use.get)
+                memory.remove(page_to_replace)
+            memory.append(page)
+        frame_updates.append(f"{page} : {' '.join(map(str, memory))}")
+    
+    return page_faults, page_hits, frame_updates
 
 
 reference_string = st.text_input("Enter Reference String (comma-separated)", "7,0,1,2,0,3,4,2,3,0,3,2")
