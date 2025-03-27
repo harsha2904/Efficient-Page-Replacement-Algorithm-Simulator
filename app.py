@@ -103,6 +103,17 @@ def optimal(pages, frames):
     
     return page_faults, page_hits, frame_updates
 
+def plot_results(results):
+    labels, faults, hits = zip(*[(algo, faults, hits) for algo, faults, hits, _ in results])
+    fig, ax = plt.subplots()
+    ax.bar(labels, faults, color='red', label='Page Faults')
+    ax.bar(labels, hits, bottom=faults, color='green', label='Page Hits')
+    ax.set_xlabel("Algorithms")
+    ax.set_ylabel("Counts")
+    ax.set_title("Page Replacement Algorithm Comparison")
+    ax.legend()
+    st.pyplot(fig)
+
 
 def main():
     st.title("Efficient Page Replacement Algorithm Simulator")
