@@ -2,155 +2,165 @@ import streamlit as st
 import matplotlib.pyplot as plt
 from collections import deque, Counter
 
-#added fifo functionality
-def fifo(pages, frames):
-    memory, page_faults, page_hits = deque(), 0, 0
-    frame_updates = []
+def FIFO(page_sequence, num_frames):
+    frame_queue = deque()
+    misses = 0
+    hits = 0
+    history_log = []
     
-    for page in pages:
-        if page in memory:
-            page_hits += 1
+    for current in page_sequence:
+        if current in frame_queue:
+            hits += 1
+        else:
+            misses += 1
+            if len(frame_queue) >= num_frames:
+                frame_queue.popleft()
+            frame_queue.append(current)
+        history_log.append(f"Page {current} → Memory: {' | '.join(map(str, frame_queue))}")
+    
+    return misses, hits, history_log
+
+def LRU(page_refs, frame_count):
+    memory_stack = []
+    fault_count = 0
+    hit_count = 0
+    step_details = []
+    
+    for reference in page_refs:
+        if reference in memory_stack:
+            hit_count += 1
+            memory_stack.remove(reference)
+        else:
+            fault_count += 1
+            if len(memory_stack) >= frame_count:
+                memory_stack.pop(0)
+        memory_stack.append(reference)
+        step_details.append(f"Reference {reference} → Current frames: {' '.join(map(str, memory_stack))}")
+    
+    return fault_count, hit_count, step_details
+
+def LFU(page_accesses, max_frames):
+    active_frames = []
+    frequency = Counter()
+    faults = 0
+    successful = 0
+    timeline = []
+    
+    for acc in page_accesses:
+        if acc in active_frames:
+            successful += 1
+        else:
+            faults += 1
+            if len(active_frames) >= max_frames:
+                least_frequent = min(active_frames, key=lambda x: frequency[x])
+                active_frames.remove(least_frequent)
+            active_frames.append(acc)
+        frequency[acc] += 1
+        timeline.append(f"Access {acc} → Memory state: {' '.join(map(str, active_frames))}")
+    
+    return faults, successful, timeline
+
+def MFU(page_requests, frame_limit):
+    cached = []
+    usage_count = Counter()
+    page_faults = 0
+    cache_hits = 0
+    operation_log = []
+    
+    for request in page_requests:
+        if request in cached:
+            cache_hits += 1
         else:
             page_faults += 1
-            if len(memory) == frames:
-                memory.popleft()
-            memory.append(page)
-        frame_updates.append(f"{page} : {' '.join(map(str, memory))}")
+            if len(cached) >= frame_limit:
+                most_used = max(cached, key=lambda x: usage_count[x])
+                cached.remove(most_used)
+            cached.append(request)
+        usage_count[request] += 1
+        operation_log.append(f"Request {request} → Cache: {' '.join(map(str, cached))}")
     
-    return page_faults, page_hits, frame_updates
+    return page_faults, cache_hits, operation_log
 
-#added lfu with some fixes
-def lfu(pages, frames):
-    memory, freq, page_faults, page_hits = [], Counter(), 0, 0
-    frame_updates = []
-    
-    for page in pages:
-        if page in memory:
-            page_hits += 1
+def OPTIMAL(page_stream, available_frames):
+    current_frames = []
+    misses = 0
+    hits = 0
+    execution_trace = []
+
+    for idx, page in enumerate(page_stream):
+        if page in current_frames:
+            hits += 1
         else:
-            page_faults += 1
-            if len(memory) == frames:
-                least_used = min(memory, key=lambda p: freq[p])
-                memory.remove(least_used)
-            memory.append(page)
-        freq[page] += 1
-        frame_updates.append(f"{page} : {' '.join(map(str, memory))}")
-    
-    return page_faults, page_hits, frame_updates
-
-
-#added lru functionality
-def lru(pages, frames):
-    memory, page_faults, page_hits = [], 0, 0
-    frame_updates = []
-    
-    for page in pages:
-        if page in memory:
-            page_hits += 1
-            memory.remove(page)
-        else:
-            page_faults += 1
-            if len(memory) == frames:
-                memory.pop(0)
-        memory.append(page)
-        frame_updates.append(f"{page} : {' '.join(map(str, memory))}")
-    
-    return page_faults, page_hits, frame_updates
-#this function used to store pages that are recently used with min time 
-#when there is no enough memory to store the pages, we'll see less recently used page and replace it with current page
-#lru fixed 
-
-#added mfu function
-def mfu(pages, frames):
-    memory, freq, page_faults, page_hits = [], Counter(), 0, 0
-    frame_updates = []
-    
-    for page in pages:
-        if page in memory:
-            page_hits += 1
-        else:
-            page_faults += 1
-            if len(memory) == frames:
-                most_used = max(memory, key=lambda p: freq[p])
-                memory.remove(most_used)
-            memory.append(page)
-        freq[page] += 1
-        frame_updates.append(f"{page} : {' '.join(map(str, memory))}")
-    
-    return page_faults, page_hits, frame_updates
-
-#optimal funtion is added
-def optimal(pages, frames):
-    memory, page_faults, page_hits = [], 0, 0
-    frame_updates = []
-
-    for i, page in enumerate(pages):
-        if page in memory:
-            page_hits += 1
-        else:
-            page_faults += 1
-            if len(memory) == frames:
-                future_use = {}
-                for mem_page in memory:
+            misses += 1
+            if len(current_frames) >= available_frames:
+                future_access = {}
+                for frame in current_frames:
                     try:
-                        future_use[mem_page] = pages[i+1:].index(mem_page)
+                        future_access[frame] = page_stream[idx+1:].index(frame)
                     except ValueError:
-                        future_use[mem_page] = float('inf')
-                page_to_replace = max(future_use, key=future_use.get)
-                memory.remove(page_to_replace)
-            memory.append(page)
-        frame_updates.append(f"{page} : {' '.join(map(str, memory))}")
+                        future_access[frame] = float('inf')
+                to_evict = max(future_access.items(), key=lambda x: x[1])[0]
+                current_frames.remove(to_evict)
+            current_frames.append(page)
+        execution_trace.append(f"Page {page} → Frames: {' '.join(map(str, current_frames))}")
     
-    return page_faults, page_hits, frame_updates
+    return misses, hits, execution_trace
 
-def plot_results(results):
-    labels, faults, hits = zip(*[(algo, faults, hits) for algo, faults, hits, _ in results])
-    fig, ax = plt.subplots()
-    ax.bar(labels, faults, color='red', label='Page Faults')
-    ax.bar(labels, hits, bottom=faults, color='green', label='Page Hits')
-    ax.set_xlabel("Algorithms")
-    ax.set_ylabel("Counts")
-    ax.set_title("Page Replacement Algorithm Comparison")
-    ax.legend()
+def Plot(algorithm_results):
+    names, fault_data, hit_data = zip(*[(name, faults, hits) for name, faults, hits, _ in algorithm_results])
+    
+    fig, axis = plt.subplots(figsize=(10, 6))
+    axis.bar(names, fault_data, color='#ff7f0e', label='Page Faults')
+    axis.bar(names, hit_data, bottom=fault_data, color='#1f77b4', label='Page Hits')
+    
+    axis.set_xlabel("Page Replacement Strategies")
+    axis.set_ylabel("Performance Metrics")
+    axis.set_title("Comparative Analysis of Page Replacement Algorithms")
+    axis.legend(loc='upper right')
+    
     st.pyplot(fig)
 
-
-def main():
-    st.title("Efficient Page Replacement Algorithm Simulator")
-    length = st.number_input("Enter the length of the trace:", min_value=1, step=1)
-    manual = st.radio("Do you want to enter pages manually?", ("Yes", "No"))
+def Execute():
+    st.header("Efficient Page Replacement Algorithms Simulator")
     
-    if manual == "Yes":
-        pages = st.text_area("Enter space-separated page references:")
-        pages = list(map(int, pages.split())) if pages else []
+    sequence_length = st.slider("Select reference sequence length:", 1, 50, 10)
+    input_method = st.selectbox("Page reference input method:", ["Manual Entry", "Auto-generated"])
+    
+    if input_method == "Manual Entry":
+        page_input = st.text_input("Enter page references (space-separated):")
+        pages = list(map(int, page_input.split())) if page_input else []
     else:
         import random
-        pages = [random.randint(1, 10) for _ in range(length)]
-        st.write("Generated Page References:", pages)
+        pages = [random.randint(1, 10) for _ in range(sequence_length)]
+        st.code(f"Generated sequence: {pages}")
     
-    frames = st.number_input("Enter the number of frames:", min_value=1, step=1)
+    frame_count = st.number_input("Number of available frames:", min_value=1, max_value=10, value=3)
     
-    algorithms = {"FIFO": fifo, "LRU": lru, "LFU": lfu, "MFU": mfu, "Optimal": optimal}
-    selected_algos = st.multiselect("Select algorithms to run:", list(algorithms.keys()), default=list(algorithms.keys()))
+    algorithm_map = {
+        "First-In-First-Out": FIFO,
+        "Least Recently Used": LRU,
+        "Least Frequently Used": LFU,
+        "Most Frequently Used": MFU,
+        "Optimal Replacement": OPTIMAL
+    }
     
-    if st.button("Run Simulation"):
-        results = [(name, *func(pages, frames)) for name, func in algorithms.items() if name in selected_algos]
+    selected = st.multiselect("Select algorithms:", options=list(algorithm_map.keys()), default=list(algorithm_map.keys()))
+    
+    if st.button("Execute Algorithms"):
+        performance_data = []
         
-        for name, faults, hits, frame_updates in results:
-            total = faults + hits
-            st.subheader(f"{name} Algorithm")
-            st.text_area("Frame Updates", '\n'.join(frame_updates), height=200)
-            st.write(f"Page Faults: {faults}, Page Hits: {hits}")
-            st.write(f"Miss Ratio: {faults / total:.2%}, Hit Ratio: {hits / total:.2%}")
+        for algo_name in selected:
+            func = algorithm_map[algo_name]
+            faults, hits, details = func(pages, frame_count)
+            performance_data.append((algo_name, faults, hits, details))
+            
+            st.subheader(algo_name)
+            st.text_area("Execution Details", '\n'.join(details), height=200)
+            st.metric("Page Faults", faults)
+            st.metric("Page Hits", hits)
+            st.metric("Hit Ratio", f"{hits/(hits+faults):.1%}")
         
-        plot_results(results)
+        Plot(performance_data)
 
 if __name__ == "__main__":
-    main()
-
-
-
-
-
-
-
+    Execute()
