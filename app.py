@@ -1,8 +1,6 @@
 import streamlit as st
 import matplotlib.pyplot as plt
-
-st.title("Hello, Streamlit!")
-st.write("This is my first Streamlit app.")
+from collections import deque, Counter
 
 #added fifo functionality
 def fifo(pages, frames):
@@ -20,29 +18,6 @@ def fifo(pages, frames):
         frame_updates.append(f"{page} : {' '.join(map(str, memory))}")
     
     return page_faults, page_hits, frame_updates
-
-
-#added lru functionality
-#this function used to store pages that are recently used with min time 
-#when there is no enough memory to store the pages, we'll see less recently used page and replace it with current page
-#lru fixed 
-def lru(pages, frames):
-    memory, page_faults, page_hits = [], 0, 0
-    frame_updates = []
-    
-    for page in pages:
-        if page in memory:
-            page_hits += 1
-            memory.remove(page)
-        else:
-            page_faults += 1
-            if len(memory) == frames:
-                memory.pop(0)
-        memory.append(page)
-        frame_updates.append(f"{page} : {' '.join(map(str, memory))}")
-    
-    return page_faults, page_hits, frame_updates
-
 
 #added lfu with some fixes
 def lfu(pages, frames):
@@ -62,6 +37,28 @@ def lfu(pages, frames):
         frame_updates.append(f"{page} : {' '.join(map(str, memory))}")
     
     return page_faults, page_hits, frame_updates
+
+
+#added lru functionality
+def lru(pages, frames):
+    memory, page_faults, page_hits = [], 0, 0
+    frame_updates = []
+    
+    for page in pages:
+        if page in memory:
+            page_hits += 1
+            memory.remove(page)
+        else:
+            page_faults += 1
+            if len(memory) == frames:
+                memory.pop(0)
+        memory.append(page)
+        frame_updates.append(f"{page} : {' '.join(map(str, memory))}")
+    
+    return page_faults, page_hits, frame_updates
+#this function used to store pages that are recently used with min time 
+#when there is no enough memory to store the pages, we'll see less recently used page and replace it with current page
+#lru fixed 
 
 #added mfu function
 def mfu(pages, frames):
@@ -107,40 +104,42 @@ def optimal(pages, frames):
     return page_faults, page_hits, frame_updates
 
 
-reference_string = st.text_input("Enter Reference String (comma-separated)", "7,0,1,2,0,3,4,2,3,0,3,2")
-frames = st.number_input("Enter Number of Frames", min_value=1, value=3, step=1)
-algorithm = st.selectbox("Choose Algorithm", ["FIFO", "LRU", "Optimal"])
-
-try:
-    reference_list = list(map(int, reference_string.split(',')))
-
+def main():
+    st.title("Efficient Page Replacement Algorithm Simulator")
+    length = st.number_input("Enter the length of the trace:", min_value=1, step=1)
+    manual = st.radio("Do you want to enter pages manually?", ("Yes", "No"))
+    
+    if manual == "Yes":
+        pages = st.text_area("Enter space-separated page references:")
+        pages = list(map(int, pages.split())) if pages else []
+    else:
+        import random
+        pages = [random.randint(1, 10) for _ in range(length)]
+        st.write("Generated Page References:", pages)
+    
+    frames = st.number_input("Enter the number of frames:", min_value=1, step=1)
+    
+    algorithms = {"FIFO": fifo, "LRU": lru, "LFU": lfu, "MFU": mfu, "Optimal": optimal}
+    selected_algos = st.multiselect("Select algorithms to run:", list(algorithms.keys()), default=list(algorithms.keys()))
+    
     if st.button("Run Simulation"):
-        simulator = PageReplacement(frames, reference_list)
+        results = [(name, *func(pages, frames)) for name, func in algorithms.items() if name in selected_algos]
+        
+        for name, faults, hits, frame_updates in results:
+            total = faults + hits
+            st.subheader(f"{name} Algorithm")
+            st.text_area("Frame Updates", '\n'.join(frame_updates), height=200)
+            st.write(f"Page Faults: {faults}, Page Hits: {hits}")
+            st.write(f"Miss Ratio: {faults / total:.2%}, Hit Ratio: {hits / total:.2%}")
+        
+        plot_results(results)
 
-        if algorithm == "FIFO":
-            page_faults = simulator.fifo()
-        elif algorithm == "LRU":
-            page_faults = simulator.lru()
-        else:
-            page_faults = simulator.optimal()
+if __name__ == "__main__":
+    main()
 
-        st.success(f"Total Page Faults ({algorithm}): {page_faults}")
 
-        # Visualization
-        results = {
-            "FIFO": simulator.fifo(),
-            "LRU": simulator.lru(),
-            "Optimal": simulator.optimal()
-        }
 
-        fig, ax = plt.subplots()
-        ax.bar(results.keys(), results.values(), color=['blue', 'green', 'red'])
-        ax.set_xlabel("Algorithm")
-        ax.set_ylabel("Page Faults")
-        ax.set_title("Page Replacement Algorithm Comparison")
-        st.pyplot(fig)
 
-except ValueError:
-    st.error("Invalid input! Please enter numbers separated by commas.")
+
 
 
